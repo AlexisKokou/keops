@@ -1,0 +1,47 @@
+#include <pybind11/pybind11.h>
+#include <pybind11/numpy.h>
+#include <cmath>
+#include <iostream>
+
+namespace py = pybind11;
+
+// ======================================================
+// Convolution gaussienne CPU simplifiée
+// f_i = sum_j exp(-||x_i - y_j||^2 / (2σ²))
+// ======================================================
+py::array_t<float> gaussian_conv(
+    py::array_t<float> x,
+    py::array_t<float> y,
+    float sigma
+) {
+    auto buf_x = x.request(), buf_y = y.request();
+    const int N = buf_x.shape[0];
+    const int M = buf_y.shape[0];
+    const int D = buf_x.shape[1];
+    if (buf_y.shape[1] != D)
+        throw std::runtime_error("x and y must have same dimension");
+    auto result = py::array_t<float>(N);
+    auto buf_f = result.request();
+    const float *px = (float*) buf_x.ptr;
+    const float *py = (float*) buf_y.ptr;
+    float *pf = (float*) buf_f.ptr;
+    const float coef = -1.0f / (2.0f * sigma * sigma);
+    for (int i = 0; i < N; ++i) {
+        float acc = 0.0f;
+        for (int j = 0; j < M; ++j) {
+            float d2 = 0.0f;
+            for (int k = 0; k < D; ++k) {
+                float diff = px[i*D + k] - py[j*D + k];
+                d2 += diff * diff;
+            }
+            acc += std::exp(coef * d2);
+        }
+        pf[i] = acc;
+    }
+    return result;
+}
+
+PYBIND11_MODULE(keops_bridge, m) {
+    m.doc() = "Simplified CPU Gaussian convolution (KeOps-like)";
+    m.def("gaussian_conv", &gaussian_conv, "Compute Gaussian convolution");
+}
