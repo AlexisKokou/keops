@@ -9,7 +9,7 @@ import jax.numpy as jnp
 
 #%%
 print("jax_enable_x64 =", jax.config.read("jax_enable_x64"), "\n")
-#Est-ce que tu m’autorises à utiliser le type float64 (double précision) ?
+#Est-ce que tu m’autorises à utiliser le type float64 ?
 #NON !
 
 
@@ -26,11 +26,12 @@ print("dtype obtenu =", x_try64.dtype, "Tronqué vers float32\n")
 
 
 jax.config.update("jax_enable_x64", True)
+
 #activation du float64
 
 
 # Recalcul en float64
-x64_after = jnp.array([1.0, 2.0, 3.0], dtype=jnp.float64)
+x64_after = jnp.array([1, 2, 3],dtype=jnp.float32)
 print("x64_after demandé en float64 =", x64_after)
 print("dtype obtenu =", x64_after.dtype, "  <-- Cette fois : float64 ✓\n")
 
@@ -39,6 +40,7 @@ print("dtype obtenu =", x64_after.dtype, "  <-- Cette fois : float64 ✓\n")
 # les données sont automatiquement converties en float32,même lorsqu’on demande explicitement du float64.
 #  Ensuite, on active l’option jax_enable_x64, qui autorise l’utilisation du float64. 
 # Après cette activation, JAX respecte correctement les types demandés.
+#on peut downcaster mais pas upcaster
 
 #%%
 import numpy as np
@@ -56,7 +58,19 @@ print("Après activation : jax_enable_x64 =", jax.config.read("jax_enable_x64"),
 
 # Convo gaussienne jax -> keops -> jax 
 
-def gaussianconv_jax_keops(X_jax, Y_jax, sigma):
+my_float64 = {
+    'numpy': np.float64,
+    'jax': jnp.float64,
+    'torch': torch.float64,
+}
+
+def gaussianconv_jax_keops(X_jax, Y_jax, sigma, dtype=None):
+
+    #if dtype == "float32":
+    #Si on a des pbs de type il faut les gérer au tout début de la fonc 
+    # tant que ça marche silencieusement on s'en occupe pas 
+    # if x64 == True -> forcer en double 
+
 
     #### 1) JAX → NumPy (float64 préservé)
     X_np = np.array(X_jax)
@@ -64,8 +78,11 @@ def gaussianconv_jax_keops(X_jax, Y_jax, sigma):
     print("dtype NumPy reçu :", X_np.dtype)
 
     #### 2) NumPy → Torch (float64)
-    X_torch = torch.from_numpy(X_np).double()   # double = float64
-    Y_torch = torch.from_numpy(Y_np).double()
+    # from numpy, dtype = float64 -> faire un dico de dtype pour chaque librairie il faut préciser 
+    #le nom du type qui correspond à float 54
+    #
+    X_torch = torch.from_numpy(X_np).to(my_float64['torch'])
+    Y_torch = torch.from_numpy(Y_np).to(my_float64['torch'])
     print("dtype Torch utilisé :", X_torch.dtype)
 
     #### 3) LazyTensor KeOps
@@ -234,3 +251,5 @@ print("Différence RELATIVE max :", grad_diff_rel)
 
 
 # %%
+#TODO faire la derivé jax de def gaussianconv_jax_keops(X_jax, Y_jax, sigma, dtype=None): marche pas
+#mardi comprendre torch fonctionne lire les docs
