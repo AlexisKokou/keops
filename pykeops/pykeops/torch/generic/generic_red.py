@@ -186,7 +186,7 @@ class GenredAutograd_base:
                 # but are useful to keep track of the actual variables used in the formula
                 _, cat, dim, pos = get_type(sig, position_in_list=var_ind)
                 var = f"Var({pos},{dim},{cat})"  # V
-                formula_g = f"Grad_WithSavedForward({params.formula},{var},{eta},{resvar})"  # Grad<F,V,G,R>
+                formula_g = f"Grad({params.formula},{var},{eta})"  # Grad<F,V,G,R>
                 aliases_g = params.aliases + [eta, resvar]
                 args_g = (*args, G, result)  # Don't forget the gradient to backprop !
 
