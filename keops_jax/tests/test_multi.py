@@ -1,7 +1,6 @@
 import jax
 import jax.numpy as jnp
 import time
-# Assurez-vous que le chemin d'importation vers votre interface JAX est correct
 from keops_jax.core.jax_interface import jax_keops_convolution
 
 # Dictionnaire des formules et fonctions de référence JAX correspondantes
@@ -21,7 +20,7 @@ TEST_FORMULAS = {
     },
     
     # 2. Noyau Linéaire / Matrice-Vecteur: K_ij = X_i . Y_j
-    # Note: La formule KeOps est "X | Y". 
+    # Note: La formule KeOps est "(X | Y)*B". 
     # La réduction Sum(K_ij) * B_j est équivalente à (X @ Y.T) @ B
     "mat_vec_mult": {
         "id": 2,
@@ -43,7 +42,7 @@ def run_test_for_formula(formula_name, X, Y, B, ref_fn):
 
     print(f"\n--- FORMULE : {formula_name} ---")
     
-    # --- 1. FORWARD CHECK ---
+    # 1.FORWARD 
     
     # JAX pur
     t0_F_jax = time.time()
@@ -64,7 +63,7 @@ def run_test_for_formula(formula_name, X, Y, B, ref_fn):
     assert diff_F < 1e-4, f"Échec du Forward pour {formula_name}: Différence trop grande."
 
 
-    # --- 2. BACKWARD CHECK ---
+    # 2.BACKWARD 
     
     # Fonction de perte JAX pure pour le gradient
     def loss_fn_naive(X_):
@@ -96,10 +95,7 @@ def run_test_for_formula(formula_name, X, Y, B, ref_fn):
 
 
 def test_all_formulas_validation():
-    print("\n========================================================")
-    print("      VALIDATION INTÉGRALE DES FORMULES JAX-KEOPS")
-    print("========================================================")
-
+    print("VALIDATION INTÉGRALE DES FORMULES JAX-KEOPS")
     device = jax.devices()[0].platform
     print(f"Backend JAX détecté : {device}")
 
