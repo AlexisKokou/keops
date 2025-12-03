@@ -17,13 +17,12 @@ def jax_keops_convolution_impl(formula_id, X, Y, B):
     # Convertit formula_id (int Python) en tableau JAX
     formula_id_jax = jnp.asarray(formula_id, dtype=jnp.int32)
     
-    # Tous les arguments sont maintenant des tableaux JAX.
+    # Tous les arguments sont maintenant des jnp.ndarray
     return jax.pure_callback(fw_callback, out_shape, formula_id_jax, X, Y, B)
 
 
 # ---------------------------------------------------------------------
 # Fonctions VJP (Forward et Backward)
-# Elles prennent maintenant formula_id (int) en premier argument
 
 def fwd(formula_id, X, Y, B):
     output = jax_keops_convolution_impl(formula_id, X, Y, B)

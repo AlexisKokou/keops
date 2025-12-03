@@ -7,9 +7,7 @@ def to_np(x):
     return x.detach().cpu().numpy()
 
 
-# --------------------------------------------------
 # GENRED factory
-# --------------------------------------------------
 def make_kernel(formula_string, D):
     aliases = [
         f"X = Vi({D})",
@@ -29,14 +27,11 @@ def make_grad_kernel(formula_string, D):
         f"X = Vi({D})",
         f"Y = Vj({D})",
         "B = Vj(1)",
-        f"Vx = Vi(1)"  # gradient upstream G
+        f"Vx = Vi(1)"  # gradient entrant G
     ]
     return Genred(grad_formula, aliases, reduction_op="Sum", axis=1)
 
-
-# --------------------------------------------------
-# FORWARD EXECUTION
-# --------------------------------------------------
+# FORWARD
 def keops_forward(formula_id, X_np, Y_np, B_np, FORMULA_STRINGS):
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -54,9 +49,7 @@ def keops_forward(formula_id, X_np, Y_np, B_np, FORMULA_STRINGS):
     return to_np(out)
 
 
-# --------------------------------------------------
-# BACKWARD EXECUTION (NO AUTOGRAD)
-# --------------------------------------------------
+# BACKWARD
 def keops_backward(formula_id, X_np, Y_np, B_np, G_np, FORMULA_STRINGS):
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -71,7 +64,7 @@ def keops_backward(formula_id, X_np, Y_np, B_np, G_np, FORMULA_STRINGS):
     formula = FORMULA_STRINGS[formula_id]
     grad_kernel = make_grad_kernel(formula, D)
 
-    # Execute KeOps symbolic gradient
+    # Execute le gradient symbolique de keOps
     dX = grad_kernel(X, Y, B, G)
 
     return to_np(dX)
