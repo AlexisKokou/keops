@@ -1,3 +1,4 @@
+# keops_jax/core/formulas.py
 # Dictionnaire lisible par l'utilisateur JAX
 
 FORMULAS = {

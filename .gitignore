@@ -66,4 +66,9 @@ benchmarks/*halide*
 sg_execution_times.rst
 
 # Docker build logs
-docker-build-*.log
+docker-build-*.log__pycache__/
+*.pyc
+.DS_Store
+__pycache__/
+*.pyc
+.DS_Store
