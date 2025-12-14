@@ -4,6 +4,9 @@ from .formulas import FORMULAS
 from .formulas import FORMULA_STRINGS
 from .keops_executor import keops_forward, keops_backward
 
+# pure_callback est utilisable avec les fonctions qui n'ont pas de side effects çàd des 
+# fonctions qui ne print rien ou qui ne modif pas, lire des données depuis le disque, 
+# changer l'état global, etc. 
 
 def jax_keops_convolution_impl(formula_id, X, Y, B):
     
@@ -14,14 +17,12 @@ def jax_keops_convolution_impl(formula_id, X, Y, B):
         # formula_id_ est un jnp.ndarray, on le convertit en int Python
         return keops_forward(int(formula_id_), X_, Y_, B_, FORMULA_STRINGS)
 
-    # Convertit formula_id (int Python) en tableau JAX
+    # Convertit formula_id (int Python) en jnp.ndarray 
     formula_id_jax = jnp.asarray(formula_id, dtype=jnp.int32)
     
     # Tous les arguments sont maintenant des jnp.ndarray
     return jax.pure_callback(fw_callback, out_shape, formula_id_jax, X, Y, B)
 
-
-# ---------------------------------------------------------------------
 # Fonctions VJP (Forward et Backward)
 
 def fwd(formula_id, X, Y, B):

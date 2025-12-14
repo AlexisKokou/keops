@@ -1,10 +1,7 @@
+# keops_executor.py
+
 import numpy as np
-import torch
-from pykeops.torch import Genred
-
-
-def to_np(x):
-    return x.detach().cpu().numpy()
+from pykeops.numpy import Genred
 
 
 # GENRED factory
@@ -31,40 +28,38 @@ def make_grad_kernel(formula_string, D):
     ]
     return Genred(grad_formula, aliases, reduction_op="Sum", axis=1)
 
+
+
 # FORWARD
 def keops_forward(formula_id, X_np, Y_np, B_np, FORMULA_STRINGS):
-
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    X = torch.tensor(X_np, dtype=torch.float32, device=device)
-    Y = torch.tensor(Y_np, dtype=torch.float32, device=device)
-    B = torch.tensor(B_np, dtype=torch.float32, device=device)
-
-    N, D = X.shape
+    # Convertir les tableaux JAX en NumPy avant de passer à PyKeOps
+    X_np = np.asarray(X_np)
+    Y_np = np.asarray(Y_np)
+    B_np = np.asarray(B_np)
+    
+    N, D = X_np.shape
 
     formula = FORMULA_STRINGS[formula_id]
     kernel = make_kernel(formula, D)
 
-    out = kernel(X, Y, B)
-    return to_np(out)
+    out = kernel(X_np, Y_np, B_np)
+    return out
 
 
 # BACKWARD
 def keops_backward(formula_id, X_np, Y_np, B_np, G_np, FORMULA_STRINGS):
-
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    X = torch.tensor(X_np, dtype=torch.float32, device=device)
-    Y = torch.tensor(Y_np, dtype=torch.float32, device=device)
-    B = torch.tensor(B_np, dtype=torch.float32, device=device)
-    G = torch.tensor(G_np, dtype=torch.float32, device=device)
-
-    N, D = X.shape
+    # Convertir les tableaux JAX en NumPy avant de passer à PyKeOps
+    X_np = np.asarray(X_np)
+    Y_np = np.asarray(Y_np)
+    B_np = np.asarray(B_np)
+    G_np = np.asarray(G_np)
+    
+    N, D = X_np.shape
 
     formula = FORMULA_STRINGS[formula_id]
     grad_kernel = make_grad_kernel(formula, D)
 
     # Execute le gradient symbolique de keOps
-    dX = grad_kernel(X, Y, B, G)
+    dX = grad_kernel(X_np, Y_np, B_np, G_np)
 
-    return to_np(dX)
+    return dX

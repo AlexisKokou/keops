@@ -59,6 +59,8 @@ def test_keops_demo_clean():
         # Utilise l'implémentation KeOps (mémoire optimisée)
         return jnp.sum(jax_keops_convolution("conv_gaussienne", X_, Y, B))
 
+#TODO : virer les sommes et faire la différence sur les vecteurs directement 
+
     # Backward JAX pur (O(N²) RAM) 
     t0 = time.time()
     grad_jax_naive = jax.grad(loss_fn_naive)(X)
