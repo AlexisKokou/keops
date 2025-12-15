@@ -1,0 +1,4 @@
+jax
+jaxlib
+pykeops>=2.2.0
+numpy
