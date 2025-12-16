@@ -1,61 +1,148 @@
 # keops_jax/core/jax_interface_nth_order.py
-"""Interface JAX pour KeOps avec support des dérivées d'ordre n"""
+"""Interface JAX pour KeOps - CORRIGÉ"""
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-from .formulas import FORMULAS, FORMULA_STRINGS
-from .keops_executor_nth_order import keops_nth_order
-from .device_utils import jax_to_numpy, numpy_to_jax
+from formulas import FORMULAS, FORMULA_STRINGS
+from keops_executor_nth_order import keops_nth_order, keops_gradient_vector, keops_directional_derivative
+from device_utils import jax_to_numpy, numpy_to_jax
 
 # ============================================================================
-# CALLBACK AVEC SUPPORT ORDRE N
+# CALLBACKS CORRIGÉS
 # ============================================================================
 
-def keops_callback_nth_order(formula_id, X, Y, B, *direction_vectors):
-    """Callback qui appelle KeOps pour l'ordre n"""
+def keops_callback_gradient_vector(formula_id, X, Y, B):
+    """Callback pour le gradient vectoriel (M, D)"""
     M, D = X.shape
-    order = len(direction_vectors)
+    out_shape = jax.ShapeDtypeStruct((M, D), X.dtype)
     
-    # Shape de sortie : (M, 1) pour tous les ordres
+    def callback_impl(formula_id_np, X_np, Y_np, B_np):
+        return keops_gradient_vector(
+            int(formula_id_np), X_np, Y_np, B_np, FORMULA_STRINGS
+        )
+    
+    # Utilisation de pure_callback avec les arrays JAX directement
+    return jax.pure_callback(
+        callback_impl,
+        out_shape,
+        np.int32(formula_id), X, Y, B,
+        vmap_method='sequential'
+    )
+
+def keops_callback_directional(formula_id, X, Y, B, direction):
+    """Callback pour la dérivée directionnelle (M, 1)"""
+    M, D = X.shape
     out_shape = jax.ShapeDtypeStruct((M, 1), X.dtype)
     
-    def callback_impl(formula_id_np, X_np, Y_np, B_np, *dir_vecs_np):
+    def callback_impl(formula_id_np, X_np, Y_np, B_np, direction_np):
+        return keops_directional_derivative(
+            int(formula_id_np), X_np, Y_np, B_np, direction_np, FORMULA_STRINGS
+        )
+    
+    # Utilisation de pure_callback avec les arrays JAX directement
+    return jax.pure_callback(
+        callback_impl,
+        out_shape,
+        np.int32(formula_id), X, Y, B, direction,
+        vmap_method='sequential'
+    )
+
+# ============================================================================
+# FONCTIONS PRINCIPALES CORRIGÉES
+# ============================================================================
+
+def jax_keops_gradient(formula_name, X, Y, B):
+    """Gradient complet (M, D) via KeOps - CORRIGÉ"""
+    formula_id = FORMULAS[formula_name]
+    return keops_callback_gradient_vector(formula_id, X, Y, B)
+
+def jax_keops_directional_derivative(formula_name, X, Y, B, direction):
+    """Dérivée directionnelle (M, 1) via KeOps"""
+    formula_id = FORMULAS[formula_name]
+    return keops_callback_directional(formula_id, X, Y, B, direction)
+
+def jax_keops_second_order(formula_name, X, Y, B, direction1, direction2):
+    """Dérivée seconde directionnelle via KeOps"""
+    formula_id = FORMULAS[formula_name]
+    return keops_callback_second_order(formula_id, X, Y, B, direction1, direction2)
+
+def jax_keops_hessian(formula_name, X, Y, B):
+    """Hessienne complète (M, D, D) via KeOps - APPROCHE ALTERNATIVE"""
+    formula_id = FORMULAS[formula_name]
+    M, D = X.shape
+    
+    # Calculer le gradient vectoriel
+    grad_func = lambda X: keops_callback_gradient_vector(formula_id, X, Y, B)
+    
+    # Calculer la Jacobienne du gradient = Hessienne
+    hessian = jax.jacobian(grad_func)(X)
+    
+    # Reformatage: hessian a shape (M, D, M, D), on veut (M, D, D) pour chaque point
+    # Note: Ceci calcule la Hessienne complète (toutes les interactions entre points)
+    # Pour une Hessienne par point (indépendante), on prend la diagonale
+    hessian_diag = hessian[jnp.arange(M), :, jnp.arange(M), :]
+    
+    return hessian_diag
+
+def jax_keops_hessian_directional(formula_name, X, Y, B, direction1, direction2):
+    """Dérivée directionnelle d'ordre 2 (M, 1) via KeOps"""
+    formula_id = FORMULAS[formula_name]
+    M, D = X.shape
+    
+    # Utiliser KeOps pour la dérivée directionnelle d'ordre 2
+    # Construction de la formule Grad(Grad(f,X,V1),X,V2)
+    out_shape = jax.ShapeDtypeStruct((M, 1), X.dtype)
+    
+    def callback_impl(formula_id_np, X_np, Y_np, B_np, dir1_np, dir2_np):
         return keops_nth_order(
-            int(formula_id_np), X_np, Y_np, B_np, *dir_vecs_np,
-            FORMULA_STRINGS=FORMULA_STRINGS
+            int(formula_id_np), X_np, Y_np, B_np, FORMULA_STRINGS, dir1_np, dir2_np
         )
     
     formula_id_np = np.int32(formula_id)
     X_np = jax_to_numpy(X)
     Y_np = jax_to_numpy(Y)
     B_np = jax_to_numpy(B)
-    dir_vecs_np = [jax_to_numpy(v) for v in direction_vectors]
+    dir1_np = jax_to_numpy(direction1)
+    dir2_np = jax_to_numpy(direction2)
     
     return jax.pure_callback(
         callback_impl,
         out_shape,
-        formula_id_np, X_np, Y_np, B_np, *dir_vecs_np,
+        formula_id_np, X_np, Y_np, B_np, dir1_np, dir2_np,
         vmap_method='sequential'
     )
 
 # ============================================================================
-# FONCTION VECTORIELLE AVEC CUSTOM_JVP
+# INTERFACE PRINCIPALE (inchangée)
 # ============================================================================
 
-_VECTOR_FUNCTION_CACHE = {}
-
 def make_vector_keops_function(formula_name):
-    """Crée une fonction vectorielle qui utilise KeOps pour les dérivées"""
-    if formula_name in _VECTOR_FUNCTION_CACHE:
-        return _VECTOR_FUNCTION_CACHE[formula_name]
-    
+    """Crée une fonction vectorielle avec custom_jvp"""
     formula_id = FORMULAS[formula_name]
     
     @jax.custom_jvp
     def vector_func(X, Y, B):
         # Forward (ordre 0)
-        return keops_callback_nth_order(formula_id, X, Y, B)
+        M, D = X.shape
+        out_shape = jax.ShapeDtypeStruct((M, 1), X.dtype)
+        
+        def callback_impl(formula_id_np, X_np, Y_np, B_np):
+            return keops_nth_order(
+                int(formula_id_np), X_np, Y_np, B_np, FORMULA_STRINGS
+            )
+        
+        formula_id_np = np.int32(formula_id)
+        X_np = jax_to_numpy(X)
+        Y_np = jax_to_numpy(Y)
+        B_np = jax_to_numpy(B)
+        
+        return jax.pure_callback(
+            callback_impl,
+            out_shape,
+            formula_id_np, X_np, Y_np, B_np,
+            vmap_method='sequential'
+        )
     
     @vector_func.defjvp
     def vector_func_jvp(primals, tangents):
@@ -67,151 +154,58 @@ def make_vector_keops_function(formula_name):
         
         # JVP : dérivée directionnelle via KeOps
         if X_dot is not None:
-            tangent_out = keops_callback_nth_order(formula_id, X, Y, B, X_dot)
+            tangent_out = keops_callback_directional(formula_id, X, Y, B, X_dot)
         else:
             tangent_out = jnp.zeros_like(primal_out)
         
         return primal_out, tangent_out
     
-    _VECTOR_FUNCTION_CACHE[formula_name] = vector_func
     return vector_func
 
-# ============================================================================
-# FONCTIONS D'ORDRE SUPÉRIEUR DIRECTES
-# ============================================================================
-
-def jax_keops_gradient(formula_name, X, Y, B):
-    """Gradient complet (Jacobienne) via KeOps"""
-    formula_id = FORMULAS[formula_name]
-    M, D = X.shape
-    
-    gradients = []
-    for d in range(D):
-        direction = jnp.zeros_like(X)
-        direction = direction.at[:, d].set(1.0)
-        dir_grad = keops_callback_nth_order(formula_id, X, Y, B, direction)
-        gradients.append(dir_grad)
-    
-    return jnp.concatenate(gradients, axis=1)
-
-def jax_keops_hessian(formula_name, X, Y, B):
-    """Hessienne complète via KeOps"""
-    formula_id = FORMULAS[formula_name]
-    M, D = X.shape
-    
-    hessian_blocks = []
-    for d1 in range(D):
-        row_blocks = []
-        for d2 in range(D):
-            direction1 = jnp.zeros_like(X).at[:, d1].set(1.0)
-            direction2 = jnp.zeros_like(X).at[:, d2].set(1.0)
-            hess_block = keops_callback_nth_order(formula_id, X, Y, B, direction1, direction2)
-            row_blocks.append(hess_block)
-        row = jnp.concatenate(row_blocks, axis=1)
-        hessian_blocks.append(row)
-    
-    return jnp.stack(hessian_blocks, axis=1)
-
-def jax_keops_third_order(formula_name, X, Y, B):
-    """Dérivée troisième via KeOps"""
-    formula_id = FORMULAS[formula_name]
-    M, D = X.shape
-    
-    third_order = []
-    for d1 in range(D):
-        for d2 in range(D):
-            for d3 in range(D):
-                directions = [
-                    jnp.zeros_like(X).at[:, d1].set(1.0),
-                    jnp.zeros_like(X).at[:, d2].set(1.0),
-                    jnp.zeros_like(X).at[:, d3].set(1.0)
-                ]
-                third_block = keops_callback_nth_order(formula_id, X, Y, B, *directions)
-                third_order.append(third_block)
-    
-    third_array = jnp.stack(third_order, axis=1)
-    return third_array.reshape(M, D, D, D)
-
-def jax_keops_nth_order_directional(formula_name, X, Y, B, *directions):
-    """Dérivée directionnelle d'ordre n"""
-    formula_id = FORMULAS[formula_name]
-    return keops_callback_nth_order(formula_id, X, Y, B, *directions)
-
-# ============================================================================
-# INTERFACE PRINCIPALE
-# ============================================================================
+_VECTOR_FUNCTION_CACHE = {}
 
 def jax_keops_convolution(formula_name, X, Y, B):
     """Interface principale - retourne un vecteur (M, 1)"""
-    return make_vector_keops_function(formula_name)(X, Y, B)
+    if formula_name not in _VECTOR_FUNCTION_CACHE:
+        _VECTOR_FUNCTION_CACHE[formula_name] = make_vector_keops_function(formula_name)
+    
+    func = _VECTOR_FUNCTION_CACHE[formula_name]
+    return func(X, Y, B)
 
 # ============================================================================
-# FONCTION SCALAIRE POUR JAX.GRAD
+# TEST SIMPLIFIÉ
 # ============================================================================
 
-_SCALAR_FUNCTION_CACHE = {}
+def test_interface():
+    """Test rapide de l'interface corrigée"""
+    import pykeops
+    pykeops.clean_pykeops()
+    
+    key = jax.random.PRNGKey(42)
+    M, N, D = 3, 4, 2
+    X = jax.random.normal(key, (M, D))
+    Y = jax.random.normal(key, (N, D))
+    B = jnp.ones((N, 1))
+    
+    print("Test forward:")
+    F = jax_keops_convolution("conv_gaussienne", X, Y, B)
+    print(f"  F shape: {F.shape} (attendu: ({M}, 1))")
+    
+    print("\nTest gradient vectoriel:")
+    G = jax_keops_gradient("conv_gaussienne", X, Y, B)
+    print(f"  ∇F shape: {G.shape} (attendu: ({M}, {D}))")
+    
+    print("\nTest dérivée directionnelle:")
+    direction = jax.random.normal(key, (M, D))
+    D_dir = jax_keops_directional_derivative("conv_gaussienne", X, Y, B, direction)
+    print(f"  D_v F shape: {D_dir.shape} (attendu: ({M}, 1))")
+    
+    # Vérification: D_v F ≈ ⟨∇F, v⟩
+    grad_v = jnp.sum(G * direction, axis=1, keepdims=True)
+    error = jnp.max(jnp.abs(D_dir - grad_v))
+    print(f"  Erreur D_v F vs ⟨∇F,v⟩: {error:.2e}")
+    
+    return F, G, D_dir
 
-def make_scalar_keops_function(formula_name):
-    """Crée une fonction scalaire compatible avec jax.grad"""
-    if formula_name in _SCALAR_FUNCTION_CACHE:
-        return _SCALAR_FUNCTION_CACHE[formula_name]
-    
-    vector_func = make_vector_keops_function(formula_name)
-    formula_id = FORMULAS[formula_name]
-    
-    @jax.custom_jvp
-    def scalar_func(X, Y, B):
-        return jnp.sum(vector_func(X, Y, B))
-    
-    @scalar_func.defjvp
-    def scalar_func_jvp(primals, tangents):
-        X, Y, B = primals
-        X_dot, Y_dot, B_dot = tangents
-        
-        primal_out = scalar_func(X, Y, B)
-        
-        if X_dot is not None:
-            dir_deriv = keops_callback_nth_order(formula_id, X, Y, B, X_dot)
-            tangent_out = jnp.sum(dir_deriv)
-        else:
-            tangent_out = jnp.array(0.0, dtype=X.dtype)
-        
-        return primal_out, tangent_out
-    
-    _SCALAR_FUNCTION_CACHE[formula_name] = scalar_func
-    return scalar_func
-
-def jax_keops_convolution_scalar(formula_name, X, Y, B):
-    """Version scalaire pour jax.grad"""
-    return make_scalar_keops_function(formula_name)(X, Y, B)
-
-# ============================================================================
-# UTILITAIRES
-# ============================================================================
-
-def get_available_formulas():
-    """Retourne la liste des formules disponibles"""
-    return list(FORMULAS.keys())
-
-def print_formula_info(formula_name):
-    """Affiche des informations sur une formule"""
-    if formula_name not in FORMULAS:
-        print(f"❌ Formule '{formula_name}' non trouvée")
-        return
-    
-    formula_id = FORMULAS[formula_name]
-    formula_string = FORMULA_STRINGS[formula_id]
-    
-    print(f"📐 Formule: {formula_name}")
-    print(f"   ID: {formula_id}")
-    print(f"   Expression KeOps: {formula_string}")
-    print(f"   Description: ", end="")
-    
-    if formula_id == 0:
-        print("Convolution avec noyau gaussien")
-    elif formula_id == 1:
-        print("Convolution avec noyau de Cauchy")
-    elif formula_id == 2:
-        print("Multiplication matrice-vecteur")
-    elif formula_id == 3:
-        print("Copie du vecteur B")
+if __name__ == "__main__":
+    test_interface()
