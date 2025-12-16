@@ -1,33 +1,34 @@
 # keops_jax/core/device_utils.py
+"""Utilitaires pour la gestion des devices"""
+
 import jax
 import jax.numpy as jnp
 import numpy as np
-from typing import Optional
+from typing import Any
 
-def get_jax_backend() -> str:
-    """Retourne le backend JAX actuel."""
-    return jax.default_backend()
-
-def jax_to_numpy(jax_array) -> np.ndarray:  # <-- DOIT ÊTRE PRÉSENTE
-    """
-    Convertit un array JAX en array NumPy.
-    (C'est gratuit et sans copie si possible)
-    """
+def jax_to_numpy(jax_array: jnp.ndarray) -> np.ndarray:
+    """Convertit un array JAX en array NumPy"""
     return np.asarray(jax_array)
 
-def numpy_to_jax(np_array) -> jnp.ndarray:
-    """
-    Convertit un array NumPy en array JAX.
-    """
+def numpy_to_jax(np_array: np.ndarray) -> jnp.ndarray:
+    """Convertit un array NumPy en array JAX"""
     return jnp.array(np_array)
 
 def check_gpu_available() -> bool:
-    """Vérifie si JAX peut utiliser le GPU."""
-    backend = get_jax_backend()
-    return backend == 'gpu'
+    """Vérifie si JAX peut utiliser le GPU"""
+    try:
+        return jax.default_backend() == 'gpu'
+    except:
+        return False
 
-def synchronize_if_needed():
-    """Synchronise les opérations si nécessaire."""
+def get_backend_info() -> str:
+    """Retourne des informations sur le backend"""
+    backend = jax.default_backend()
+    device_count = jax.device_count()
+    return f"Backend: {backend}, Devices: {device_count}"
+
+def synchronize_device():
+    """Synchronise le device (utile pour les mesures de temps)"""
     if check_gpu_available():
-        # Avec JAX, block_until_ready() assure la synchronisation
-        pass
+        # Force synchronization on GPU
+        jax.devices()[0].synchronize_all_activity()

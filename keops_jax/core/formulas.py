@@ -1,5 +1,5 @@
 # keops_jax/core/formulas.py
-# Dictionnaire lisible par l'utilisateur JAX
+"""Définitions des formules KeOps"""
 
 FORMULAS = {
     # 0. Convolution Gaussienne (Originale)
@@ -22,10 +22,6 @@ FORMULA_STRINGS = {
     
     # 1. (1 / (1 + SqDist(X,Y))) * B : Noyau de Cauchy / MultiQuadric Inverse - CORRIGÉ
     1: "(1 / (1 + SqDist(X,Y))) * B",
-    
-    # 2. (X | Y) * B : Produit scalaire de X_i et Y_j
-    2: "(X | Y) * B", # Multiplie le produit scalaire par le vecteur B_j avant la sommation.
-    
-    # 3. B : Copie simplement la valeur du vecteur Vj(1) sur Vi
+    2: "(X | Y) * B",
     3: "B",
 }
